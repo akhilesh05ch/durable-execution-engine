@@ -234,3 +234,36 @@ mvn test
 
 All tests pass with 100% success rate.
 
+**Alternative considered**: Stack trace inspection - rejected because it's fragile and breaks with code refactoring.
+
+## Handling Edge Cases
+
+### The Zombie Step Problem
+
+**What if the process crashes between execution and database commit?**
+
+```
+t1: Execute step ✓
+t2: Calculate result ✓
+t3: 💥 CRASH (before database save)
+```
+
+**Our approach**: At-least-once execution
+
+On restart, the step re-executes because it's not in the database. This is safe for **idempotent operations** (operations that can be safely repeated):
+
+```java
+// ✅ Safe to re-execute
+ctx.step("fetch", () -> database.query(...));
+ctx.step("calculate", () -> price * quantity);
+
+// ⚠️ Needs idempotency key
+ctx.step("charge-card", () -> {
+    if (!alreadyCharged(orderId)) {
+        return stripe.charge(amount, idempotencyKey);
+    }
+});
+```
+
+
+**Built with**: Java 17, Maven, SQLite, Gson, JUnit 5
